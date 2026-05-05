@@ -3,8 +3,12 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.db.database import get_db
 from app.db.models import Conversation, Message, Document
+from app.core.llm import LLMManager
 import uuid
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -75,29 +79,76 @@ async def get_conversation(conv_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{conv_id}/messages")
 async def add_message(conv_id: str, msg: MessageCreate, db: Session = Depends(get_db)):
-    """Add message to conversation (stores user message only)."""
+    """Add message and get LLM response."""
     conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    msg_id = str(uuid.uuid4())
-    new_msg = Message(
-        id=msg_id,
+    # Store user message
+    user_msg_id = str(uuid.uuid4())
+    user_msg = Message(
+        id=user_msg_id,
         conversation_id=conv_id,
         role="user",
         content=msg.content,
         model_used=msg.model
     )
-    db.add(new_msg)
+    db.add(user_msg)
     db.commit()
-    db.refresh(new_msg)
 
-    return {
-        "id": new_msg.id,
-        "role": new_msg.role,
-        "content": new_msg.content,
-        "created_at": new_msg.created_at
-    }
+    # Prepare context
+    context = ""
+    if conv.document_id:
+        doc = db.query(Document).filter(Document.id == conv.document_id).first()
+        if doc and doc.content_extracted:
+            context = f"Document context:\n{doc.content_extracted[:2000]}\n\n"
+
+    # Build messages for LLM
+    messages = [
+        {
+            "role": m.role,
+            "content": m.content
+        }
+        for m in db.query(Message).filter(Message.conversation_id == conv_id).all()
+    ]
+
+    # Get LLM response
+    try:
+        # Parse provider and model
+        provider_model = msg.model.split(":") if ":" in msg.model else [msg.model.split("-")[0], msg.model]
+        provider = provider_model[0] if len(provider_model) > 1 else "openai"
+        model = msg.model
+
+        llm = LLMManager.get_provider(provider, model)
+        response_text = await llm.chat(messages, system_prompt=context)
+
+        # Store assistant response
+        asst_msg_id = str(uuid.uuid4())
+        asst_msg = Message(
+            id=asst_msg_id,
+            conversation_id=conv_id,
+            role="assistant",
+            content=response_text,
+            model_used=msg.model
+        )
+        db.add(asst_msg)
+        db.commit()
+
+        return {
+            "user_message": {
+                "id": user_msg_id,
+                "role": "user",
+                "content": msg.content,
+            },
+            "assistant_message": {
+                "id": asst_msg_id,
+                "role": "assistant",
+                "content": response_text,
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating response: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{conv_id}/fork")
 async def fork_conversation(conv_id: str, message_id: str, db: Session = Depends(get_db)):
