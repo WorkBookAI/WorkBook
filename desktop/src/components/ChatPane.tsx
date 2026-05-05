@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import MergePanel from './MergePanel'
 
 interface ChatPaneProps {
   documentId: string
@@ -17,6 +18,7 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
   const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo')
   const [loading, setLoading] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
+  const [showMergePanel, setShowMergePanel] = useState(false)
 
   useEffect(() => {
     createConversation()
@@ -32,6 +34,22 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
       setMessages([])
     } catch (error) {
       console.error('Error creating conversation:', error)
+    }
+  }
+
+  const handleForkConversation = async (messageId?: string) => {
+    if (!conversation || messages.length === 0) return
+
+    const targetMsgId = messageId || messages[messages.length - 1].id
+    try {
+      const data = await window.api.request(
+        'POST',
+        `/api/conversations/${conversation.id}/fork?message_id=${targetMsgId}`
+      )
+      // Optionally notify user
+      console.log('Fork created:', data)
+    } catch (error) {
+      console.error('Error forking conversation:', error)
     }
   }
 
@@ -75,7 +93,16 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
     <div className="w-96 bg-gray-900 flex flex-col border-l border-gray-700">
       {/* Header */}
       <div className="p-4 border-b border-gray-700">
-        <h3 className="font-semibold mb-2">Chat</h3>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="font-semibold flex-1">Chat</h3>
+          <button
+            onClick={() => handleForkConversation()}
+            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+            title="Fork conversation"
+          >
+            🔀
+          </button>
+        </div>
         <select
           value={selectedModel}
           onChange={e => setSelectedModel(e.target.value)}
@@ -123,6 +150,14 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
 
       {/* Input */}
       <div className="p-4 border-t border-gray-700">
+        {showMergePanel && (
+          <div className="mb-3">
+            <MergePanel
+              conversationId={conversation.id}
+              onMergeComplete={() => setShowMergePanel(false)}
+            />
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             type="text"
