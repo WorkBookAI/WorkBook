@@ -28,7 +28,8 @@ export default function ConversationTree({
 
   const fetchTree = async () => {
     try {
-      const data = await window.api.request('GET', `/api/conversations/${conversationId}/tree`)
+      const response = await fetch(`http://127.0.0.1:8000/api/conversations/${conversationId}/tree`)
+      const data = await response.json()
       setTree(data)
     } catch (error) {
       console.error('Error fetching conversation tree:', error)

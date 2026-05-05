@@ -19,7 +19,10 @@ export default function MergePanel({ conversationId, onMergeComplete }: MergePan
   const handleViewMerge = async () => {
     setLoading(true)
     try {
-      const data = await window.api.request('POST', `/api/conversations/${conversationId}/merge`)
+      const response = await fetch(`http://127.0.0.1:8000/api/conversations/${conversationId}/merge`, {
+        method: 'POST',
+      })
+      const data = await response.json()
       setSuggestion(data)
     } catch (error) {
       console.error('Error fetching merge suggestions:', error)
@@ -30,7 +33,9 @@ export default function MergePanel({ conversationId, onMergeComplete }: MergePan
 
   const handleConfirmMerge = async () => {
     try {
-      await window.api.request('POST', `/api/conversations/${conversationId}/merge-confirm`)
+      await fetch(`http://127.0.0.1:8000/api/conversations/${conversationId}/merge-confirm`, {
+        method: 'POST',
+      })
       setSuggestion(null)
       onMergeComplete()
     } catch (error) {

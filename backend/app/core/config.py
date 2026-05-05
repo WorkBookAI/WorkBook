@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     workbook_dir: Path = Path.home() / ".workbook"
     db_path: Path = workbook_dir / "workbook.db"
     config_file: Path = workbook_dir / "config.json"
+    gemini_api_key: Optional[str] = None
 
     class Config:
         env_file = ".env"
