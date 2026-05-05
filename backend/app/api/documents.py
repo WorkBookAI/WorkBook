@@ -66,10 +66,18 @@ async def list_documents(db: Session = Depends(get_db)):
 
 @router.get("/{doc_id}")
 async def get_document(doc_id: str, db: Session = Depends(get_db)):
-    """Get document details."""
+    """Get document details with structured content."""
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    content = None
+    try:
+        extracted = DocumentProcessor.process_document(doc.path)
+        if extracted and extracted.get("content"):
+            content = extracted
+    except Exception as e:
+        pass
 
     return {
         "id": doc.id,
@@ -77,6 +85,7 @@ async def get_document(doc_id: str, db: Session = Depends(get_db)):
         "file_type": doc.file_type,
         "size": doc.size,
         "created_at": doc.created_at,
+        "content": content,
         "content_extracted": doc.content_extracted[:1000] if doc.content_extracted else None
     }
 

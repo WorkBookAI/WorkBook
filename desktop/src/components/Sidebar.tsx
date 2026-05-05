@@ -63,11 +63,8 @@ export default function Sidebar({
             accept=".pdf,.docx,.pptx,.py,.js,.ts,.java,.cpp,.md,.txt,.png,.jpg,.jpeg"
           />
           <label htmlFor="file-input" className="block cursor-pointer">
-            <svg className="w-6 h-6 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <div className="text-sm font-medium text-gray-900">Add File</div>
-            <div className="text-xs text-gray-500 mt-1">or drag here</div>
+            <div className="text-xs font-medium text-gray-900">+ Add File</div>
+            <div className="text-xs text-gray-500 mt-0.5">or drag here</div>
           </label>
         </div>
       </div>
