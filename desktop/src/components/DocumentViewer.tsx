@@ -12,20 +12,25 @@ interface DocumentViewerProps {
 export default function DocumentViewer({ document }: DocumentViewerProps) {
   const [content, setContent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDocumentContent()
   }, [document.id])
 
   const fetchDocumentContent = async () => {
+    setError(null)
     try {
       const response = await fetch(`http://127.0.0.1:8000/api/documents/${document.id}`)
+      if (!response.ok) {
+        throw new Error(`Failed to load document: ${response.statusText}`)
+      }
       const data = await response.json()
       setContent(data)
-      setCurrentPage(0)
-    } catch (error) {
-      console.error('Error fetching document:', error)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('Error fetching document:', err)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }
@@ -43,58 +48,69 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
       )
     }
 
-    if (!content || !content.content || content.content.length === 0) {
+    if (error) {
       return (
         <div className="flex items-center justify-center h-full">
-          <div className="text-center text-gray-600">
-            <p>No content extracted</p>
-            <p className="text-sm text-gray-500 mt-2">Document may still be processing</p>
+          <div className="text-center bg-red-50 p-8 rounded-lg max-w-md">
+            <p className="text-red-700 font-semibold mb-2">Error Loading Document</p>
+            <p className="text-red-600 text-sm">{error}</p>
           </div>
         </div>
       )
     }
 
-    const currentContent = content.content[currentPage]
+    if (!content) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center text-gray-600">
+            <p>Failed to load document</p>
+          </div>
+        </div>
+      )
+    }
+
+    const isPptx = document.file_type === 'pptx'
+    const isPdf = document.file_type === 'pdf'
+    const fileUrl = `http://127.0.0.1:8000/api/documents/${document.id}/file`
+    const pdfUrl = isPptx ? `http://127.0.0.1:8000/api/documents/${document.id}/pdf` : fileUrl
 
     return (
       <div className="h-full flex flex-col">
-        {/* Page Header */}
-        <div className="px-8 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">{document.name}</h2>
-            <p className="text-xs text-gray-500 mt-1">Page {currentPage + 1} of {content.content.length}</p>
-          </div>
-          {content.content.length > 1 && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                disabled={currentPage === 0}
-                className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                ← Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(Math.min(content.content.length - 1, currentPage + 1))}
-                disabled={currentPage === content.content.length - 1}
-                className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Next →
-              </button>
-            </div>
-          )}
+        <div className="px-8 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900">{document.name}</h2>
+          {isPptx && <p className="text-xs text-gray-500 mt-1">Converting to PDF...</p>}
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-3xl mx-auto">
-            <div className="prose prose-sm max-w-none">
-              {currentContent && (
-                <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                  {currentContent.text || 'No text content'}
+        <div className="flex-1 overflow-hidden bg-gray-100">
+          {isPdf || isPptx ? (
+            <object
+              data={pdfUrl}
+              type="application/pdf"
+              className="w-full h-full"
+            >
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center bg-yellow-50 p-8 rounded-lg">
+                  <p className="text-yellow-700 font-semibold mb-2">PDF Viewer Unavailable</p>
+                  <p className="text-yellow-600 text-sm mb-4">Could not display the PDF in this browser</p>
+                  <a
+                    href={pdfUrl}
+                    download
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Download PDF
+                  </a>
                 </div>
-              )}
+              </div>
+            </object>
+          ) : (
+            <div className="h-full overflow-y-auto p-8">
+              <div className="max-w-4xl mx-auto bg-white rounded-lg p-8 shadow-sm">
+                <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {content.full_text || content.content_extracted || 'No content available'}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     )

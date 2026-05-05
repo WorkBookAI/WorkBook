@@ -6,6 +6,9 @@ from app.core.document_processor import DocumentProcessor
 from app.core.search import FullTextSearch
 import uuid
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -71,20 +74,26 @@ async def get_document(doc_id: str, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    content = {"type": doc.file_type, "content": []}
+    content = {"type": doc.file_type, "content": [], "full_text": ""}
 
     try:
+        logger.info(f"[GET] Processing document: {doc.path}")
         extracted = DocumentProcessor.process_document(doc.path)
-        if extracted and extracted.get("content"):
+        logger.info(f"[GET] Extracted type: {extracted.get('type')}")
+        logger.info(f"[GET] Extracted content length: {len(extracted.get('content', []))}")
+        logger.info(f"[GET] Extracted full_text length: {len(extracted.get('full_text', ''))}")
+
+        if extracted:
             content = {
                 "type": extracted.get("type"),
                 "content": extracted.get("content", []),
                 "full_text": extracted.get("full_text", "")
             }
+            logger.info(f"[GET] Content prepared: type={content['type']}, text_len={len(content['full_text'])}")
     except Exception as e:
-        import logging
-        logging.error(f"Error extracting document {doc_id}: {e}")
+        logger.error(f"[GET] Error extracting document {doc_id}: {e}", exc_info=True)
 
+    logger.info(f"[GET] Returning content with full_text length: {len(content.get('full_text', ''))}")
     return {
         "id": doc.id,
         "name": doc.name,
@@ -107,6 +116,50 @@ async def delete_document(doc_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "deleted"}
+
+@router.get("/{doc_id}/file")
+async def get_document_file(doc_id: str, db: Session = Depends(get_db)):
+    """Get the raw document file for rendering."""
+    from fastapi.responses import FileResponse
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return FileResponse(doc.path, media_type="application/octet-stream", filename=doc.name)
+
+@router.get("/{doc_id}/pdf")
+async def get_document_pdf(doc_id: str, db: Session = Depends(get_db)):
+    """Convert PPTX to PDF and serve it."""
+    from fastapi.responses import FileResponse
+    import os
+
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        logger.error(f"Document not found: {doc_id}")
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if doc.file_type != 'pptx':
+        logger.warning(f"Non-PPTX file requested: {doc.file_type}")
+        raise HTTPException(status_code=400, detail="Only PPTX files can be converted to PDF")
+
+    try:
+        from app.core.document_processor import DocumentProcessor
+        logger.info(f"[PDF] Converting PPTX to PDF: {doc.path}")
+        logger.info(f"[PDF] File exists: {os.path.exists(doc.path)}")
+
+        pdf_path = DocumentProcessor.convert_pptx_to_pdf(doc.path)
+        logger.info(f"[PDF] PDF path returned: {pdf_path}")
+        logger.info(f"[PDF] PDF file exists: {os.path.exists(pdf_path)}")
+        logger.info(f"[PDF] PDF file size: {os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0}")
+
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=doc.name.replace('.pptx', '.pdf')
+        )
+    except Exception as e:
+        logger.error(f"[PDF] Error converting PPTX to PDF: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to convert PPTX: {str(e)}")
 
 @router.get("/{doc_id}/search")
 async def search_document(doc_id: str, q: str = Query(...), db: Session = Depends(get_db)):

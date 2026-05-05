@@ -3,6 +3,8 @@ import * as path from 'path'
 
 let mainWindow: BrowserWindow | null = null
 
+app.disableHardwareAcceleration()
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -10,6 +12,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: false,
+      sandbox: false,
     },
   })
 

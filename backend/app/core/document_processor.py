@@ -4,6 +4,9 @@ from pptx import Presentation
 from pathlib import Path
 from typing import Optional, List
 import logging
+import subprocess
+import tempfile
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +17,7 @@ class DocumentProcessor:
         doc = fitz.open(file_path)
         content = []
         images = []
+        num_pages = len(doc)
 
         for page_num, page in enumerate(doc):
             text = page.get_text()
@@ -24,21 +28,24 @@ class DocumentProcessor:
 
             # Extract images
             for img_idx, img in enumerate(page.get_images()):
-                xref = img[0]
-                pix = fitz.Pixmap(doc, xref)
-                image_path = f"{file_path}_page{page_num+1}_img{img_idx}.png"
-                pix.save(image_path)
-                images.append({
-                    "page": page_num + 1,
-                    "path": image_path,
-                })
+                try:
+                    xref = img[0]
+                    pix = fitz.Pixmap(doc, xref)
+                    image_path = f"{file_path}_page{page_num+1}_img{img_idx}.png"
+                    pix.save(image_path)
+                    images.append({
+                        "page": page_num + 1,
+                        "path": image_path,
+                    })
+                except Exception as e:
+                    logger.debug(f"Could not extract image: {e}")
 
         full_text = "\n".join([c["text"] for c in content])
         doc.close()
 
         return {
             "type": "pdf",
-            "pages": len(doc),
+            "pages": num_pages,
             "content": content,
             "full_text": full_text,
             "images": images,
@@ -59,35 +66,126 @@ class DocumentProcessor:
         }
 
     @staticmethod
-    def extract_pptx(file_path: str) -> dict:
-        """Extract text from PPTX with Unicode support."""
-        prs = Presentation(file_path)
-        slides_content = []
+    def convert_pptx_to_pdf(file_path: str) -> str:
+        """Convert PPTX to PDF by rendering slides as images."""
+        try:
+            output_path = file_path.replace('.pptx', '.pdf')
 
-        for slide_num, slide in enumerate(prs.slides):
-            slide_text = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text:
+            # Try LibreOffice command line first
+            try:
+                import subprocess
+                import shutil
+
+                # Check if soffice exists
+                if shutil.which('soffice') or shutil.which('libreoffice'):
+                    cmd = shutil.which('soffice') or shutil.which('libreoffice')
+                    subprocess.run([
+                        cmd,
+                        '--headless',
+                        '--convert-to', 'pdf',
+                        '--outdir', str(Path(file_path).parent),
+                        file_path
+                    ], check=True, capture_output=True, timeout=120)
+
+                    if os.path.exists(output_path):
+                        logger.info(f"Successfully converted to PDF using LibreOffice: {output_path}")
+                        return output_path
+            except Exception as e:
+                logger.info(f"LibreOffice not available: {e}")
+
+            # Fallback: Convert each slide to image and embed in PDF
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import letter
+            from PIL import Image, ImageDraw
+            import tempfile
+
+            prs = Presentation(file_path)
+            slide_width_inches = prs.slide_width / 914400
+            slide_height_inches = prs.slide_height / 914400
+
+            # Create PDF with images
+            c = canvas.Canvas(output_path, pagesize=(
+                slide_width_inches * 72,
+                slide_height_inches * 72
+            ))
+
+            for slide_num, slide in enumerate(prs.slides):
+                # Create image for this slide
+                img_width, img_height = 1280, 720
+                img = Image.new('RGB', (img_width, img_height), color='white')
+                draw = ImageDraw.Draw(img)
+
+                # Draw slide content
+                y_offset = 40
+                draw.text((40, y_offset), f"Slide {slide_num + 1}", fill='black')
+                y_offset += 40
+
+                # Extract and draw text from shapes
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        try:
+                            text = shape.text.encode('utf-8', errors='replace').decode('utf-8')
+                            for line in text.split('\n'):
+                                if y_offset < img_height - 40:
+                                    draw.text((40, y_offset), line[:100], fill='black')
+                                    y_offset += 20
+                        except:
+                            pass
+
+                # Save image to temp file
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                    img.save(tmp.name)
+
+                    # Add image to PDF
+                    c.drawImage(tmp.name, 0, 0,
+                               width=slide_width_inches * 72,
+                               height=slide_height_inches * 72)
+                    c.showPage()
+
+                    # Clean up temp file
                     try:
-                        text = shape.text.encode('utf-8', errors='replace').decode('utf-8')
-                        slide_text.append(text)
-                    except Exception as e:
-                        logger.warning(f"Error extracting text from shape: {e}")
-                        continue
+                        os.unlink(tmp.name)
+                    except:
+                        pass
 
-            slides_content.append({
-                "slide": slide_num + 1,
-                "text": "\n".join(slide_text),
-            })
+            c.save()
+            logger.info(f"Successfully created PDF from images: {output_path}")
+            return output_path
 
-        full_text = "\n\n".join([s["text"] for s in slides_content if s["text"]])
+        except Exception as e:
+            logger.error(f"Error converting PPTX to PDF: {e}", exc_info=True)
+            raise
 
-        return {
-            "type": "pptx",
-            "slides": len(prs.slides),
-            "content": slides_content,
-            "full_text": full_text,
-        }
+    @staticmethod
+    def extract_pptx(file_path: str) -> dict:
+        """Extract basic info from PPTX."""
+        try:
+            prs = Presentation(file_path)
+            full_text = ""
+
+            for slide_num, slide in enumerate(prs.slides):
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        try:
+                            text = shape.text.encode('utf-8', errors='replace').decode('utf-8')
+                            full_text += text + "\n"
+                        except:
+                            pass
+
+            return {
+                "type": "pptx",
+                "slides": len(prs.slides),
+                "content": [],
+                "full_text": full_text,
+            }
+        except Exception as e:
+            logger.error(f"Error extracting PPTX: {e}")
+            return {
+                "type": "pptx",
+                "slides": 0,
+                "content": [],
+                "full_text": "",
+            }
 
     @staticmethod
     def extract_code(file_path: str) -> dict:
