@@ -14,7 +14,7 @@ class Document(Base):
     content_extracted = Column(Text)  # indexed, full text
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    metadata = Column(JSON)  # pages, author, etc
+    doc_metadata = Column(JSON)  # pages, author, etc
 
     conversations = relationship("Conversation", back_populates="document")
     notes = relationship("Note", back_populates="document")

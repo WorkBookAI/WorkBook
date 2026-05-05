@@ -38,7 +38,7 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
         path=str(file_path),
         size=len(contents),
         content_extracted=content_text[:50000],  # Store first 50k chars
-        metadata={"original_name": file.filename, "processed": True}
+        doc_metadata={"original_name": file.filename, "processed": True}
     )
     db.add(doc)
     db.commit()
