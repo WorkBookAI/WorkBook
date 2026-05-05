@@ -50,19 +50,20 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
     setLoading(true)
 
     try {
-      await window.api.request('POST', `/api/conversations/${conversation.id}/messages`, {
+      const response = await window.api.request('POST', `/api/conversations/${conversation.id}/messages`, {
         content: input,
         model: selectedModel,
       })
 
-      // TODO: Get actual response from LLM (Phase 3)
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Assistant response pending (Phase 3: LLM integration)',
-        created_at: new Date().toISOString(),
+      if (response.assistant_message) {
+        const assistantMessage: Message = {
+          id: response.assistant_message.id,
+          role: 'assistant',
+          content: response.assistant_message.content,
+          created_at: new Date().toISOString(),
+        }
+        setMessages(prev => [...prev, assistantMessage])
       }
-      setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
