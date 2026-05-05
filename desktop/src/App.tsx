@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import DocumentViewer from './components/DocumentViewer'
 import ChatPane from './components/ChatPane'
+import Settings from './components/Settings'
+import { ThemeName, styleMap } from './themes'
 import './App.css'
 
 interface Document {
@@ -16,10 +18,24 @@ function App() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [conversations, setConversations] = useState([])
+  const [theme, setTheme] = useState<ThemeName>('dark')
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     fetchDocuments()
+    // Load theme from localStorage
+    const savedTheme = localStorage.getItem('theme') as ThemeName
+    if (savedTheme) setTheme(savedTheme)
   }, [])
+
+  useEffect(() => {
+    // Apply theme
+    const style = document.createElement('style')
+    style.textContent = styleMap[theme]
+    document.head.appendChild(style)
+    localStorage.setItem('theme', theme)
+    return () => style.remove()
+  }, [theme])
 
   const fetchDocuments = async () => {
     try {
@@ -59,6 +75,7 @@ function App() {
         selectedDocId={selectedDocId}
         onSelectDocument={handleSelectDocument}
         onUpload={handleUploadDocument}
+        onSettings={() => setShowSettings(true)}
       />
 
       <div className="flex-1 flex">
@@ -76,6 +93,14 @@ function App() {
           </div>
         )}
       </div>
+
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          theme={theme}
+          onThemeChange={setTheme}
+        />
+      )}
     </div>
   )
 }

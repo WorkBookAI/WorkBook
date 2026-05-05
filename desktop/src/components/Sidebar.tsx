@@ -5,6 +5,7 @@ interface SidebarProps {
   selectedDocId: string | null
   onSelectDocument: (docId: string) => void
   onUpload: (file: File) => void
+  onSettings: () => void
 }
 
 export default function Sidebar({
@@ -12,6 +13,7 @@ export default function Sidebar({
   selectedDocId,
   onSelectDocument,
   onUpload,
+  onSettings,
 }: SidebarProps) {
   const [isDragging, setIsDragging] = useState(false)
 
@@ -100,7 +102,10 @@ export default function Sidebar({
 
       {/* Settings */}
       <div className="p-4 border-t border-gray-700">
-        <button className="w-full px-3 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 transition-colors">
+        <button
+          onClick={onSettings}
+          className="w-full px-3 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+        >
           Settings
         </button>
       </div>
