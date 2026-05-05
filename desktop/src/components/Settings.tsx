@@ -25,7 +25,8 @@ export default function Settings({ onClose, theme, onThemeChange }: SettingsProp
 
   const fetchRules = async () => {
     try {
-      const data = await window.api.request('GET', '/api/rules/')
+      const response = await fetch('http://127.0.0.1:8000/api/rules/')
+      const data = await response.json()
       setRules(data)
     } catch (error) {
       console.error('Error fetching rules:', error)
@@ -36,10 +37,14 @@ export default function Settings({ onClose, theme, onThemeChange }: SettingsProp
     if (!newRuleName.trim() || !newRuleContent.trim()) return
 
     try {
-      await window.api.request('POST', '/api/rules/', {
-        name: newRuleName,
-        content: newRuleContent,
-        active: true,
+      await fetch('http://127.0.0.1:8000/api/rules/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newRuleName,
+          content: newRuleContent,
+          active: true,
+        }),
       })
       setNewRuleName('')
       setNewRuleContent('')
@@ -52,7 +57,9 @@ export default function Settings({ onClose, theme, onThemeChange }: SettingsProp
 
   const handleDeleteRule = async (id: string) => {
     try {
-      await window.api.request('DELETE', `/api/rules/${id}`)
+      await fetch(`http://127.0.0.1:8000/api/rules/${id}`, {
+        method: 'DELETE',
+      })
       fetchRules()
     } catch (error) {
       console.error('Error deleting rule:', error)

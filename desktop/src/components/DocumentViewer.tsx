@@ -31,7 +31,8 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
 
   const fetchDocumentContent = async () => {
     try {
-      const data = await window.api.request('GET', `/api/documents/${document.id}`)
+      const response = await fetch(`http://127.0.0.1:8000/api/documents/${document.id}`)
+      const data = await response.json()
       setContent(data)
       setCurrentPage(0)
     } catch (error) {

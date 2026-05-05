@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import path from 'path'
-import isDev from 'electron-is-dev'
+import * as path from 'path'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -9,21 +8,14 @@ function createWindow() {
     width: 1400,
     height: 900,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true,
+      contextIsolation: false,
     },
   })
 
-  const startUrl = isDev
-    ? 'http://localhost:5173'
-    : `file://${path.join(__dirname, '../build/index.html')}`
-
+  const startUrl = 'http://localhost:5173'
   mainWindow.loadURL(startUrl)
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools()
-  }
+  mainWindow.webContents.openDevTools()
 
   mainWindow.on('closed', () => {
     mainWindow = null

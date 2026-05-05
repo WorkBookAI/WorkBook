@@ -39,7 +39,8 @@ function App() {
 
   const fetchDocuments = async () => {
     try {
-      const data = await window.api.request('GET', '/api/documents/')
+      const response = await fetch('http://127.0.0.1:8000/api/documents/')
+      const data = await response.json()
       setDocuments(data)
     } catch (error) {
       console.error('Error fetching documents:', error)

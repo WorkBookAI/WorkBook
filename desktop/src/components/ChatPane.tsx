@@ -15,7 +15,7 @@ interface Message {
 export default function ChatPane({ documentId }: ChatPaneProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo')
+  const [selectedModel, setSelectedModel] = useState('gemini-3.1-flash-lite-preview')
   const [loading, setLoading] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
   const [showMergePanel, setShowMergePanel] = useState(false)
@@ -26,10 +26,15 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
 
   const createConversation = async () => {
     try {
-      const data = await window.api.request('POST', '/api/conversations/', {
-        name: 'Chat',
-        document_id: documentId,
+      const response = await fetch('http://127.0.0.1:8000/api/conversations/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Chat',
+          document_id: documentId,
+        }),
       })
+      const data = await response.json()
       setConversation(data)
       setMessages([])
     } catch (error) {
@@ -42,11 +47,11 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
 
     const targetMsgId = messageId || messages[messages.length - 1].id
     try {
-      const data = await window.api.request(
-        'POST',
-        `/api/conversations/${conversation.id}/fork?message_id=${targetMsgId}`
+      const response = await fetch(
+        `http://127.0.0.1:8000/api/conversations/${conversation.id}/fork?message_id=${targetMsgId}`,
+        { method: 'POST' }
       )
-      // Optionally notify user
+      const data = await response.json()
       console.log('Fork created:', data)
     } catch (error) {
       console.error('Error forking conversation:', error)
@@ -68,16 +73,21 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
     setLoading(true)
 
     try {
-      const response = await window.api.request('POST', `/api/conversations/${conversation.id}/messages`, {
-        content: input,
-        model: selectedModel,
+      const response = await fetch(`http://127.0.0.1:8000/api/conversations/${conversation.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: input,
+          model: selectedModel,
+        }),
       })
+      const result = await response.json()
 
-      if (response.assistant_message) {
+      if (result.assistant_message) {
         const assistantMessage: Message = {
-          id: response.assistant_message.id,
+          id: result.assistant_message.id,
           role: 'assistant',
-          content: response.assistant_message.content,
+          content: result.assistant_message.content,
           created_at: new Date().toISOString(),
         }
         setMessages(prev => [...prev, assistantMessage])
@@ -108,9 +118,19 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
           onChange={e => setSelectedModel(e.target.value)}
           className="w-full px-3 py-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-100"
         >
-          <option>gpt-3.5-turbo</option>
-          <option>gpt-4</option>
-          <option>ollama</option>
+          <optgroup label="Google Gemini">
+            <option>gemini-3.1-flash-lite-preview</option>
+            <option>gemini-3.1-pro-preview</option>
+            <option>gemini-2.5-flash-image</option>
+            <option>gemini-pro-latest</option>
+          </optgroup>
+          <optgroup label="OpenAI">
+            <option>gpt-3.5-turbo</option>
+            <option>gpt-4</option>
+          </optgroup>
+          <optgroup label="Local">
+            <option>ollama</option>
+          </optgroup>
         </select>
       </div>
 
