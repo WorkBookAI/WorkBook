@@ -60,22 +60,27 @@ class DocumentProcessor:
 
     @staticmethod
     def extract_pptx(file_path: str) -> dict:
-        """Extract text from PPTX."""
+        """Extract text from PPTX with Unicode support."""
         prs = Presentation(file_path)
         slides_content = []
 
         for slide_num, slide in enumerate(prs.slides):
             slide_text = []
             for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    slide_text.append(shape.text)
+                if hasattr(shape, "text") and shape.text:
+                    try:
+                        text = shape.text.encode('utf-8', errors='replace').decode('utf-8')
+                        slide_text.append(text)
+                    except Exception as e:
+                        logger.warning(f"Error extracting text from shape: {e}")
+                        continue
 
             slides_content.append({
                 "slide": slide_num + 1,
                 "text": "\n".join(slide_text),
             })
 
-        full_text = "\n".join([s["text"] for s in slides_content])
+        full_text = "\n\n".join([s["text"] for s in slides_content if s["text"]])
 
         return {
             "type": "pptx",

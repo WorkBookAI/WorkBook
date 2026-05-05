@@ -71,13 +71,19 @@ async def get_document(doc_id: str, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    content = None
+    content = {"type": doc.file_type, "content": []}
+
     try:
         extracted = DocumentProcessor.process_document(doc.path)
         if extracted and extracted.get("content"):
-            content = extracted
+            content = {
+                "type": extracted.get("type"),
+                "content": extracted.get("content", []),
+                "full_text": extracted.get("full_text", "")
+            }
     except Exception as e:
-        pass
+        import logging
+        logging.error(f"Error extracting document {doc_id}: {e}")
 
     return {
         "id": doc.id,
