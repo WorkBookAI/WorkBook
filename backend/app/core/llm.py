@@ -3,7 +3,8 @@ import asyncio
 from typing import Optional, List, AsyncGenerator
 import openai
 import anthropic
-from app.core.config import ConfigManager
+import google.generativeai as genai
+from app.core.config import ConfigManager, settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,53 @@ class AnthropicProvider(LLMProvider):
             for text in stream.text_stream:
                 yield text
 
+class GeminiProvider(LLMProvider):
+    def __init__(self, model: str = "gemini-3.1-flash-lite-preview"):
+        self.model = model
+        api_key = settings.gemini_api_key or ConfigManager.get_api_key("gemini")
+        if not api_key:
+            logger.warning("No Gemini API key found")
+        else:
+            genai.configure(api_key=api_key)
+
+    async def chat(self, messages: List[dict], system_prompt: Optional[str] = None, temperature: float = 0.7) -> str:
+        try:
+            model = genai.GenerativeModel(self.model)
+            prompt = ""
+            if system_prompt:
+                prompt += system_prompt + "\n\n"
+
+            for msg in messages:
+                content = msg.get('content', '')
+                prompt += content + "\n"
+
+            response = model.generate_content(prompt)
+            if response.text:
+                return response.text
+            return "No response generated"
+        except Exception as e:
+            logger.error(f"Gemini API error: {e}")
+            return f"Error: {str(e)[:200]}"
+
+    async def stream(self, messages: List[dict], system_prompt: Optional[str] = None) -> AsyncGenerator[str, None]:
+        try:
+            model = genai.GenerativeModel(self.model)
+            prompt = ""
+            if system_prompt:
+                prompt += system_prompt + "\n\n"
+
+            for msg in messages:
+                content = msg.get('content', '')
+                prompt += content + "\n"
+
+            response = model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error(f"Gemini streaming error: {e}")
+            yield f"Error: {str(e)[:200]}"
+
 class LLMManager:
     @staticmethod
     def get_provider(provider: str, model: str, **kwargs) -> LLMProvider:
@@ -163,6 +211,8 @@ class LLMManager:
             return OpenAIProvider(model)
         elif provider == "anthropic":
             return AnthropicProvider(model)
+        elif provider == "gemini":
+            return GeminiProvider(model)
         else:
             raise ValueError(f"Unknown provider: {provider}")
 

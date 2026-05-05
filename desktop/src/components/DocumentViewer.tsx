@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
 
 interface DocumentViewerProps {
   document: {
@@ -10,116 +9,112 @@ interface DocumentViewerProps {
   }
 }
 
-interface DocumentContent {
-  type: string
-  full_text?: string
-  content?: any[]
-  pages?: number
-  slides?: number
-}
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-
 export default function DocumentViewer({ document }: DocumentViewerProps) {
-  const [content, setContent] = useState<DocumentContent | null>(null)
+  const [content, setContent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDocumentContent()
   }, [document.id])
 
   const fetchDocumentContent = async () => {
+    setError(null)
     try {
-      const data = await window.api.request('GET', `/api/documents/${document.id}`)
+      const response = await fetch(`http://127.0.0.1:8000/api/documents/${document.id}`)
+      if (!response.ok) {
+        throw new Error(`Failed to load document: ${response.statusText}`)
+      }
+      const data = await response.json()
       setContent(data)
-      setCurrentPage(0)
-    } catch (error) {
-      console.error('Error fetching document:', error)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('Error fetching document:', err)
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }
   }
 
   const renderContent = () => {
-    if (loading) return <div className="text-center">Loading...</div>
-    if (!content) return <div className="text-center text-gray-500">Failed to load content</div>
-
-    switch (document.file_type) {
-      case 'pdf':
-      case 'docx':
-      case 'pptx':
-        return (
-          <div className="space-y-4">
-            {content.content && content.content.length > 0 ? (
-              <>
-                <div className="text-sm text-gray-400 mb-2">
-                  Page {currentPage + 1} of {content.content.length}
-                </div>
-                <div className="bg-gray-700 p-4 rounded text-sm whitespace-pre-wrap break-words">
-                  {content.content[currentPage]?.text || 'No content'}
-                </div>
-                {content.content.length > 1 && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                      disabled={currentPage === 0}
-                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(Math.min(content.content.length - 1, currentPage + 1))}
-                      disabled={currentPage === content.content.length - 1}
-                      className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div>No content extracted</div>
-            )}
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading document...</p>
           </div>
-        )
-      case 'py':
-      case 'js':
-      case 'ts':
-      case 'java':
-      case 'cpp':
-      case 'c':
-      case 'go':
-      case 'rs':
-        return (
-          <pre className="bg-gray-700 p-4 rounded text-sm overflow-auto">
-            <code>{content.full_text}</code>
-          </pre>
-        )
-      case 'txt':
-      case 'md':
-        return (
-          <div className="bg-gray-700 p-4 rounded text-sm whitespace-pre-wrap break-words">
-            {content.full_text}
-          </div>
-        )
-      default:
-        return <div className="text-center text-gray-500">Preview not available for {document.file_type}</div>
+        </div>
+      )
     }
-  }
 
-  return (
-    <div className="flex-1 bg-gray-800 border-r border-gray-700 flex flex-col">
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="font-semibold truncate">{document.name}</h2>
-        <div className="text-xs text-gray-400 mt-1">
-          {document.file_type.toUpperCase()} • {(document.size / 1024).toFixed(2)} KB
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center bg-red-50 p-8 rounded-lg max-w-md">
+            <p className="text-red-700 font-semibold mb-2">Error Loading Document</p>
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (!content) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center text-gray-600">
+            <p>Failed to load document</p>
+          </div>
+        </div>
+      )
+    }
+
+    const isPptx = document.file_type === 'pptx'
+    const isPdf = document.file_type === 'pdf'
+    const fileUrl = `http://127.0.0.1:8000/api/documents/${document.id}/file`
+    const pdfUrl = isPptx ? `http://127.0.0.1:8000/api/documents/${document.id}/pdf` : fileUrl
+
+    return (
+      <div className="h-full flex flex-col">
+        <div className="px-8 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900">{document.name}</h2>
+          {isPptx && <p className="text-xs text-gray-500 mt-1">Converting to PDF...</p>}
+        </div>
+
+        <div className="flex-1 overflow-hidden bg-gray-100">
+          {isPdf || isPptx ? (
+            <object
+              data={pdfUrl}
+              type="application/pdf"
+              className="w-full h-full"
+            >
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center bg-yellow-50 p-8 rounded-lg">
+                  <p className="text-yellow-700 font-semibold mb-2">PDF Viewer Unavailable</p>
+                  <p className="text-yellow-600 text-sm mb-4">Could not display the PDF in this browser</p>
+                  <a
+                    href={pdfUrl}
+                    download
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              </div>
+            </object>
+          ) : (
+            <div className="h-full overflow-y-auto p-8">
+              <div className="max-w-4xl mx-auto bg-white rounded-lg p-8 shadow-sm">
+                <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {content.full_text || content.content_extracted || 'No content available'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+    )
+  }
 
-      <div className="flex-1 overflow-auto p-4">
-        {renderContent()}
-      </div>
-    </div>
-  )
+  return <div className="h-full flex flex-col bg-white">{renderContent()}</div>
 }

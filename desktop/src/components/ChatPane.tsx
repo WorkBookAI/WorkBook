@@ -15,10 +15,9 @@ interface Message {
 export default function ChatPane({ documentId }: ChatPaneProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo')
+  const [selectedModel, setSelectedModel] = useState('gemini-3.1-flash-lite-preview')
   const [loading, setLoading] = useState(false)
   const [conversation, setConversation] = useState<any>(null)
-  const [showMergePanel, setShowMergePanel] = useState(false)
 
   useEffect(() => {
     createConversation()
@@ -26,10 +25,15 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
 
   const createConversation = async () => {
     try {
-      const data = await window.api.request('POST', '/api/conversations/', {
-        name: 'Chat',
-        document_id: documentId,
+      const response = await fetch('http://127.0.0.1:8000/api/conversations/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Study Session',
+          document_id: documentId,
+        }),
       })
+      const data = await response.json()
       setConversation(data)
       setMessages([])
     } catch (error) {
@@ -37,24 +41,8 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
     }
   }
 
-  const handleForkConversation = async (messageId?: string) => {
-    if (!conversation || messages.length === 0) return
-
-    const targetMsgId = messageId || messages[messages.length - 1].id
-    try {
-      const data = await window.api.request(
-        'POST',
-        `/api/conversations/${conversation.id}/fork?message_id=${targetMsgId}`
-      )
-      // Optionally notify user
-      console.log('Fork created:', data)
-    } catch (error) {
-      console.error('Error forking conversation:', error)
-    }
-  }
-
   const handleSendMessage = async () => {
-    if (!input.trim() || !conversation) return
+    if (!input.trim() || !conversation || loading) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -68,16 +56,21 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
     setLoading(true)
 
     try {
-      const response = await window.api.request('POST', `/api/conversations/${conversation.id}/messages`, {
-        content: input,
-        model: selectedModel,
+      const response = await fetch(`http://127.0.0.1:8000/api/conversations/${conversation.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: input,
+          model: selectedModel,
+        }),
       })
+      const result = await response.json()
 
-      if (response.assistant_message) {
+      if (result.assistant_message) {
         const assistantMessage: Message = {
-          id: response.assistant_message.id,
+          id: result.assistant_message.id,
           role: 'assistant',
-          content: response.assistant_message.content,
+          content: result.assistant_message.content,
           created_at: new Date().toISOString(),
         }
         setMessages(prev => [...prev, assistantMessage])
@@ -90,88 +83,86 @@ export default function ChatPane({ documentId }: ChatPaneProps) {
   }
 
   return (
-    <div className="w-96 bg-gray-900 flex flex-col border-l border-gray-700">
+    <div className="flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2 mb-2">
-          <h3 className="font-semibold flex-1">Chat</h3>
-          <button
-            onClick={() => handleForkConversation()}
-            className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
-            title="Fork conversation"
-          >
-            🔀
-          </button>
-        </div>
+      <div className="px-4 py-4 border-b border-gray-200 bg-gray-50">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Chat Assistant</h3>
         <select
           value={selectedModel}
           onChange={e => setSelectedModel(e.target.value)}
-          className="w-full px-3 py-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-100"
+          className="w-full px-3 py-1 text-xs border border-gray-300 rounded bg-white text-gray-900 hover:border-gray-400 transition-colors"
         >
-          <option>gpt-3.5-turbo</option>
-          <option>gpt-4</option>
-          <option>ollama</option>
+          <optgroup label="Google Gemini">
+            <option>gemini-3.1-flash-lite-preview</option>
+            <option>gemini-3.1-pro-preview</option>
+            <option>gemini-2.5-flash-image</option>
+            <option>gemini-pro-latest</option>
+          </optgroup>
+          <optgroup label="OpenAI">
+            <option>gpt-3.5-turbo</option>
+            <option>gpt-4</option>
+          </optgroup>
+          <optgroup label="Local">
+            <option>ollama</option>
+          </optgroup>
         </select>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 text-sm mt-8">
-            <p>No messages yet</p>
-            <p className="text-xs mt-2">Type something to start chatting</p>
+          <div className="flex items-center justify-center h-full text-center">
+            <div className="text-gray-500">
+              <p className="text-sm font-medium mb-1">No messages yet</p>
+              <p className="text-xs text-gray-400">Ask a question to get started</p>
+            </div>
           </div>
         ) : (
           messages.map(msg => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
+                className={`max-w-xs px-4 py-2 rounded-lg text-sm ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-gray-800 text-gray-100 rounded-bl-none'
+                    ? 'bg-gray-900 text-white rounded-br-none'
+                    : 'bg-gray-100 text-gray-900 rounded-bl-none'
                 }`}
               >
-                {msg.content}
+                <div className="whitespace-pre-wrap break-words leading-relaxed">
+                  {msg.content}
+                </div>
               </div>
             </div>
           ))
         )}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-800 px-3 py-2 rounded-lg text-sm text-gray-400">
-              Typing...
+            <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-lg rounded-bl-none">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              </div>
             </div>
           </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-700">
-        {showMergePanel && (
-          <div className="mb-3">
-            <MergePanel
-              conversationId={conversation.id}
-              onMergeComplete={() => setShowMergePanel(false)}
-            />
-          </div>
-        )}
+      <div className="px-4 py-4 border-t border-gray-200 bg-gray-50">
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
+            onKeyPress={e => e.key === 'Enter' && !loading && handleSendMessage()}
             placeholder="Ask something..."
-            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
             disabled={loading}
           />
           <button
             onClick={handleSendMessage}
             disabled={loading || !input.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded text-sm font-medium transition-colors"
+            className="px-4 py-2 text-sm bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             Send
           </button>
